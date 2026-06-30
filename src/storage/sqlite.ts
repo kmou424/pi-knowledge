@@ -321,13 +321,14 @@ export function createKB(
 		source_path?: string;
 		source_type: KnowledgeBase["source_type"];
 		source_options?: string;
+		embedding_model?: string;
 	},
 ): KnowledgeBase {
 	const id = randomUUID();
 	const now = Date.now();
 	db.prepare(
-		`INSERT INTO knowledge_bases (id, name, description, source_path, source_type, source_options, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO knowledge_bases (id, name, description, source_path, source_type, source_options, created_at, updated_at, embedding_model)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	).run(
 		id,
 		opts.name,
@@ -337,6 +338,7 @@ export function createKB(
 		opts.source_options ?? null,
 		now,
 		now,
+		opts.embedding_model ?? "multilingual-e5-small",
 	);
 	const kb = getKB(db, id);
 	if (!kb) throw new Error(`Failed to create knowledge base: ${id}`);

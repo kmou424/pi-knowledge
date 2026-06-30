@@ -40,6 +40,14 @@ describe("embedding provider", () => {
 		expect(workerMock.embedInModelWorker).not.toHaveBeenCalled();
 	});
 
+	it("derives the current embedding model from the configured provider", async () => {
+		vi.stubEnv("PI_KNOWLEDGE_EMBEDDING", "openai:Qwen3-Embedding-0.6B");
+
+		const { getCurrentEmbeddingModel } = await import("../../src/embedding/provider.ts");
+
+		expect(getCurrentEmbeddingModel()).toBe("Qwen3-Embedding-0.6B");
+	});
+
 	it("prefers the configured auth resolver over PI_KNOWLEDGE_EMBEDDING_API_KEY", async () => {
 		vi.stubEnv("PI_KNOWLEDGE_EMBEDDING", "openai:custom-embedding-model");
 		vi.stubEnv("PI_KNOWLEDGE_EMBEDDING_API_KEY", "fallback-key");

@@ -16,6 +16,11 @@ const API_FALLBACK_TO_LOCAL = process.env.PI_KNOWLEDGE_EMBEDDING_API_FALLBACK ==
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_API_MAX_EMBED_CHARS = 20_000;
 
+export function getCurrentEmbeddingModel(): string {
+	const [, model] = EMBEDDING_CONFIG.split(":");
+	return model?.trim() || "multilingual-e5-small";
+}
+
 export function setEmbeddingApiKeyResolver(resolver: EmbeddingApiKeyResolver | undefined): void {
 	embeddingApiKeyResolver = resolver;
 }

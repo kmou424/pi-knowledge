@@ -6,6 +6,7 @@ import {
 	dispose as disposeEmbedding,
 	embedDocuments,
 	embedQuery,
+	getCurrentEmbeddingModel,
 	prepareForShutdown as prepareEmbeddingForShutdown,
 } from "./embedding/provider.ts";
 import { openVectorReader, openVectorWriter } from "./embedding/vectors.ts";
@@ -82,7 +83,7 @@ export interface SearchResult {
 	ranking?: RankingDiagnostics;
 }
 
-export const CURRENT_EMBEDDING_MODEL = "multilingual-e5-small";
+export const CURRENT_EMBEDDING_MODEL = getCurrentEmbeddingModel();
 
 export interface SearchResponse {
 	results: SearchResult[];
@@ -598,6 +599,7 @@ export class KnowledgeEngine {
 			source_path: isDir || isFile ? resolvedSource : isUrl ? source : undefined,
 			source_type: sourceType,
 			source_options: serializeAddOptions(options),
+			embedding_model: CURRENT_EMBEDDING_MODEL,
 		});
 		updateKBStatus(db, kb.id, "indexing");
 		startIndexingJob(db, kb.id, "add", `Starting indexing for "${name}"`);
@@ -1476,7 +1478,12 @@ export class KnowledgeEngine {
 		const lines = readFileSync(inputPath, "utf-8").trim().split("\n");
 		if (lines.length < 1) throw new Error("Empty import file");
 		const header = JSON.parse(lines[0]) as { name: string; description?: string };
-		const kb = createKB(this.db, { name: header.name, description: header.description, source_type: "text" });
+		const kb = createKB(this.db, {
+			name: header.name,
+			description: header.description,
+			source_type: "text",
+			embedding_model: CURRENT_EMBEDDING_MODEL,
+		});
 		updateKBStatus(this.db, kb.id, "indexing");
 		startIndexingJob(this.db, kb.id, "import", `Starting import for "${header.name}"`);
 		let vectorWriter: ReturnType<typeof openVectorWriter> | undefined;

@@ -7,6 +7,42 @@ import { getIndexingJob, openDatabase } from "../../src/storage/sqlite.ts";
 
 const TEST_DIR = "/tmp/pk-test-engine";
 
+const embeddingProviderMock = vi.hoisted(() => {
+	const dimensions = 32;
+
+	function tokenize(text: string): string[] {
+		return text.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
+	}
+
+	function tokenBucket(token: string): number {
+		let hash = 0;
+		for (let i = 0; i < token.length; i++) hash = (hash * 31 + token.charCodeAt(i)) >>> 0;
+		return hash % dimensions;
+	}
+
+	function embed(text: string): Float32Array {
+		const vector = new Float32Array(dimensions);
+		for (const token of tokenize(text)) vector[tokenBucket(token)] += 1;
+		let norm = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
+		if (norm === 0) norm = 1;
+		for (let i = 0; i < vector.length; i++) vector[i] /= norm;
+		return vector;
+	}
+
+	return {
+		dispose: vi.fn(async () => {}),
+		embedDocuments: vi.fn(async (texts: string[]) => texts.map(embed)),
+		embedQuery: vi.fn(async (text: string) => embed(text)),
+		getCurrentEmbeddingModel: vi.fn(() => {
+			const [, model] = (process.env.PI_KNOWLEDGE_EMBEDDING ?? "local:multilingual-e5-small").split(":");
+			return model?.trim() || "multilingual-e5-small";
+		}),
+		prepareForShutdown: vi.fn(async () => {}),
+	};
+});
+
+vi.mock("../../src/embedding/provider.ts", () => embeddingProviderMock);
+
 describe("KnowledgeEngine", () => {
 	let engine: KnowledgeEngine;
 
@@ -85,6 +121,12 @@ describe("KnowledgeEngine", () => {
 			await engine.add("Test content for model mismatch checking with enough text to be indexed.", "ModelTest");
 			const result = await engine.search("model", { mode: "fast" });
 			expect(result.warnings).toBeUndefined();
+		});
+
+		it("stores the current embedding model on new knowledge bases", async () => {
+			await engine.add("Test content for model metadata persistence.", "ModelMetadata");
+
+			expect(engine.list()[0].embedding_model).toBe("multilingual-e5-small");
 		});
 	});
 
