@@ -1,4 +1,5 @@
 type KnowledgeEngineInstance = import("./src/engine.ts").KnowledgeEngine;
+type EmbeddingProviderRuntime = typeof import("./src/embedding/provider.ts");
 type StorageRuntime = typeof import("./src/storage/sqlite.ts");
 type WatcherRuntime = typeof import("./src/watcher/file-watcher.ts");
 
@@ -71,8 +72,13 @@ const Type = {
 
 type Runtime = {
 	engine: KnowledgeEngineInstance;
+	embedding: EmbeddingProviderRuntime;
 	storage: StorageRuntime;
 	watcher: WatcherRuntime;
+};
+
+type AuthStorageLike = {
+	getApiKey(providerId: string, options?: { includeFallback?: boolean }): Promise<string | undefined>;
 };
 
 const RUNTIME_EXTENSION = import.meta.url.endsWith(".ts") ? ".ts" : ".js";
@@ -94,20 +100,47 @@ async function loadRuntime(): Promise<Runtime> {
 	if (runtime) return runtime;
 	runtimePromise ??= Promise.all([
 		import(runtimeModule("./src/engine")),
+		import(runtimeModule("./src/embedding/provider")),
 		import(runtimeModule("./src/storage/sqlite")),
 		import(runtimeModule("./src/watcher/file-watcher")),
-	]).then(([engineModule, storage, watcher]) => {
-		runtime = { engine: new engineModule.KnowledgeEngine(), storage, watcher };
+	]).then(([engineModule, embedding, storage, watcher]) => {
+		runtime = { engine: new engineModule.KnowledgeEngine(), embedding, storage, watcher };
 		return runtime;
 	});
 	return runtimePromise;
 }
 
-async function ensureInitialized(): Promise<Runtime> {
+function getAuthStorage(ctx: unknown): AuthStorageLike | undefined {
+	if (!ctx || typeof ctx !== "object") return undefined;
+	const modelRegistry = (ctx as { modelRegistry?: unknown }).modelRegistry;
+	if (!modelRegistry || typeof modelRegistry !== "object") return undefined;
+	const authStorage = (modelRegistry as { authStorage?: unknown }).authStorage;
+	if (!authStorage || typeof authStorage !== "object") return undefined;
+	const getApiKey = (authStorage as { getApiKey?: unknown }).getApiKey;
+	if (typeof getApiKey !== "function") return undefined;
+	return authStorage as AuthStorageLike;
+}
+
+function configureEmbeddingAuth(loaded: Runtime, ctx: unknown): void {
+	const authStorage = getAuthStorage(ctx);
+	if (!authStorage) return;
+	loaded.embedding.setEmbeddingApiKeyResolver(() => authStorage.getApiKey("pi-knowledge", { includeFallback: false }));
+}
+
+async function ensureInitialized(ctx?: unknown): Promise<Runtime> {
 	if (disposePromise) await disposePromise;
-	if (initialized && runtime) return runtime;
+	if (initialized && runtime) {
+		configureEmbeddingAuth(runtime, ctx);
+		return runtime;
+	}
+	if (initializePromise) {
+		const loaded = await initializePromise;
+		configureEmbeddingAuth(loaded, ctx);
+		return loaded;
+	}
 	initializePromise ??= (async () => {
 		const loaded = await loadRuntime();
+		configureEmbeddingAuth(loaded, ctx);
 		await loaded.engine.initialize(loaded.storage.getDefaultKnowledgeDir());
 		initialized = true;
 		return loaded;
@@ -146,6 +179,7 @@ async function disposeRuntime(): Promise<void> {
 		runtimePromise = undefined;
 		if (!loaded) return;
 		loaded.watcher.stopAllWatchers();
+		loaded.embedding.setEmbeddingApiKeyResolver(undefined);
 		await loaded.engine.dispose({ disposeModels: false });
 	})();
 	try {
@@ -156,8 +190,8 @@ async function disposeRuntime(): Promise<void> {
 }
 
 export default function (pi: ExtensionAPI) {
-	pi.on("session_start", async () => {
-		const { engine, watcher } = await ensureInitialized();
+	pi.on("session_start", async (_event, ctx) => {
+		const { engine, watcher } = await ensureInitialized(ctx);
 		if (WATCH_ENABLED) {
 			for (const kb of engine.list()) {
 				if (kb.source_path && kb.source_type === "directory") {
@@ -175,9 +209,9 @@ export default function (pi: ExtensionAPI) {
 
 	// Auto-inject: search KB for relevant context before each LLM call (opt-in)
 	if (AUTO_INJECT) {
-		pi.on("context", async (event) => {
+		pi.on("context", async (event, ctx) => {
 			try {
-				const { engine } = await ensureInitialized();
+				const { engine } = await ensureInitialized(ctx);
 				const kbs = engine.list();
 				if (kbs.length === 0) return;
 				// Find last user message
@@ -197,8 +231,8 @@ export default function (pi: ExtensionAPI) {
 		});
 	}
 
-	pi.on("before_agent_start", async (event) => {
-		const { engine } = await ensureInitialized();
+	pi.on("before_agent_start", async (event, ctx) => {
+		const { engine } = await ensureInitialized(ctx);
 		const kbs = engine.list();
 		if (kbs.length === 0) return undefined;
 		const desc = kbs.map((kb) => `"${kb.name}" (${kb.chunk_count} chunks, ${kb.file_count} files)`).join(", ");
@@ -240,8 +274,8 @@ export default function (pi: ExtensionAPI) {
 				Type.Array(Type.String({ description: "Relative paths under a directory source to exclude from this plan" })),
 			),
 		}),
-		async execute(_id, params) {
-			const { engine } = await ensureInitialized();
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const { engine } = await ensureInitialized(ctx);
 			const { source, include_suggested_text, include_paths, exclude_paths } = params as {
 				source: string;
 				include_suggested_text?: boolean;
@@ -314,8 +348,8 @@ export default function (pi: ExtensionAPI) {
 				Type.Array(Type.String({ description: "Relative paths under a directory source to exclude from this KB" })),
 			),
 		}),
-		async execute(_id, params, _signal, onUpdate) {
-			const { engine, watcher } = await ensureInitialized();
+		async execute(_id, params, _signal, onUpdate, ctx) {
+			const { engine, watcher } = await ensureInitialized(ctx);
 			const { source, name, include_suggested_text, include_paths, exclude_paths } = params as {
 				source: string;
 				name: string;
@@ -393,8 +427,8 @@ export default function (pi: ExtensionAPI) {
 				Type.Boolean({ description: "Include ranking diagnostics and mode/fallback details in the result" }),
 			),
 		}),
-		async execute(_id, params) {
-			const { engine } = await ensureInitialized();
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const { engine } = await ensureInitialized(ctx);
 			const { query, mode, limit, kb_id, offset, file_type, diversity, diagnostics } = params as {
 				query: string;
 				mode?: "auto" | "fast" | "semantic" | "hybrid" | "deep" | "adaptive";
@@ -451,8 +485,8 @@ export default function (pi: ExtensionAPI) {
 		parameters: Type.Object({
 			target: Type.String({ description: "KB name or ID to update" }),
 		}),
-		async execute(_id, params, _signal, onUpdate) {
-			const { engine } = await ensureInitialized();
+		async execute(_id, params, _signal, onUpdate, ctx) {
+			const { engine } = await ensureInitialized(ctx);
 			const { added, removed, unchanged } = await engine.update(
 				(params as { target: string }).target,
 				(msg) => {
@@ -471,8 +505,8 @@ export default function (pi: ExtensionAPI) {
 		label: "Knowledge Status",
 		description: "Show knowledge engine status with health diagnostics: staleness, orphans, and coverage",
 		parameters: Type.Object({}),
-		async execute() {
-			const { engine, storage, watcher } = await ensureInitialized();
+		async execute(_id, _params, _signal, _onUpdate, ctx) {
+			const { engine, storage, watcher } = await ensureInitialized(ctx);
 			const kbs = engine.list();
 			const watchCount = watcher.getActiveWatcherCount();
 			const diagnostics = engine.diagnose();
@@ -548,8 +582,8 @@ export default function (pi: ExtensionAPI) {
 		description: "Diagnose knowledge base health, skipped files, stale indexes, stuck jobs, and recommended fixes",
 		promptSnippet: "Diagnose knowledge base health and recommended actions",
 		parameters: Type.Object({}),
-		async execute() {
-			const { engine } = await ensureInitialized();
+		async execute(_id, _params, _signal, _onUpdate, ctx) {
+			const { engine } = await ensureInitialized(ctx);
 			const report = engine.doctor();
 			const lines = [`Health score: ${report.health_score}/100`, report.summary, ""];
 			if (report.issues.length === 0) {
@@ -570,8 +604,8 @@ export default function (pi: ExtensionAPI) {
 		label: "Knowledge Show",
 		description: "List all indexed knowledge bases",
 		parameters: Type.Object({}),
-		async execute() {
-			const { engine } = await ensureInitialized();
+		async execute(_id, _params, _signal, _onUpdate, ctx) {
+			const { engine } = await ensureInitialized(ctx);
 			const kbs = engine.list();
 			if (kbs.length === 0) return { content: [{ type: "text", text: "No knowledge bases." }] };
 			const lines = kbs.map((kb) => `• ${kb.name} — ${kb.chunk_count} chunks, ${kb.file_count} files (${kb.status})`);
@@ -586,8 +620,8 @@ export default function (pi: ExtensionAPI) {
 		parameters: Type.Object({
 			target: Type.String({ description: "KB name or ID to remove" }),
 		}),
-		async execute(_id, params) {
-			const { engine } = await ensureInitialized();
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const { engine } = await ensureInitialized(ctx);
 			const ok = engine.remove((params as { target: string }).target);
 			return { content: [{ type: "text", text: ok ? "Removed." : "Not found." }] };
 		},
@@ -601,8 +635,8 @@ export default function (pi: ExtensionAPI) {
 			target: Type.String({ description: "KB name or ID to export" }),
 			output: Type.String({ description: "Output file path (.jsonl)" }),
 		}),
-		async execute(_id, params) {
-			const { engine } = await ensureInitialized();
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const { engine } = await ensureInitialized(ctx);
 			const { target, output } = params as { target: string; output: string };
 			const count = await engine.exportKB(target, output);
 			return { content: [{ type: "text", text: `Exported ${count} chunks to ${output}` }] };
@@ -616,8 +650,8 @@ export default function (pi: ExtensionAPI) {
 		parameters: Type.Object({
 			input: Type.String({ description: "Input JSONL file path" }),
 		}),
-		async execute(_id, params, _signal, onUpdate) {
-			const { engine } = await ensureInitialized();
+		async execute(_id, params, _signal, onUpdate, ctx) {
+			const { engine } = await ensureInitialized(ctx);
 			const { kb, chunkCount } = await engine.importKB(
 				(params as { input: string }).input,
 				(msg) => {
@@ -634,8 +668,8 @@ export default function (pi: ExtensionAPI) {
 		label: "Knowledge Clear",
 		description: "Remove all knowledge bases",
 		parameters: Type.Object({}),
-		async execute() {
-			const { engine } = await ensureInitialized();
+		async execute(_id, _params, _signal, _onUpdate, ctx) {
+			const { engine } = await ensureInitialized(ctx);
 			engine.clear();
 			return { content: [{ type: "text", text: "All knowledge bases cleared." }] };
 		},

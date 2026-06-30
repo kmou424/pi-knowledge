@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Resolved OpenAI-compatible embedding API keys from Pi `auth.json` credential `pi-knowledge` first, then `PI_KNOWLEDGE_EMBEDDING_API_KEY`, without reading the global `OPENAI_API_KEY`.
+- Resolved OpenAI-compatible embedding API keys from Pi `auth.json` credential `pi-knowledge` first, then `PI_KNOWLEDGE_EMBEDDING_API_KEY`, without reading the global `OPENAI_API_KEY`
 ## [0.4.6] - 2026-06-26
 
 ### Fixed

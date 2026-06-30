@@ -1,7 +1,10 @@
 import { embedInModelWorker } from "../model-worker-client.ts";
 
+export type EmbeddingApiKeyResolver = () => Promise<string | undefined>;
+
 let disposeTimer: ReturnType<typeof setTimeout> | null = null;
 let disposePromise: Promise<void> | null = null;
+let embeddingApiKeyResolver: EmbeddingApiKeyResolver | undefined;
 let activeRuns = 0;
 let disposeRequested = false;
 const idleWaiters: Array<() => void> = [];
@@ -12,6 +15,15 @@ const ENABLE_NATIVE_IDLE_DISPOSE = process.env.PI_KNOWLEDGE_ENABLE_NATIVE_IDLE_D
 const API_FALLBACK_TO_LOCAL = process.env.PI_KNOWLEDGE_EMBEDDING_API_FALLBACK === "local";
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_API_MAX_EMBED_CHARS = 20_000;
+
+export function setEmbeddingApiKeyResolver(resolver: EmbeddingApiKeyResolver | undefined): void {
+	embeddingApiKeyResolver = resolver;
+}
+
+async function resolveEmbeddingApiKey(): Promise<string | undefined> {
+	const resolved = await embeddingApiKeyResolver?.();
+	return resolved?.trim() || process.env.PI_KNOWLEDGE_EMBEDDING_API_KEY?.trim() || undefined;
+}
 
 function clearIdleTimer(): void {
 	if (disposeTimer) clearTimeout(disposeTimer);
@@ -68,8 +80,12 @@ async function embedViaAPI(texts: string[], prefix: "query" | "passage"): Promis
 	const safeTexts = prefixedTexts.map((text) => (text.length > maxChars ? text.slice(0, maxChars) : text));
 
 	if (provider === "openai") {
-		const apiKey = process.env.OPENAI_API_KEY;
-		if (!apiKey) throw new Error("OPENAI_API_KEY required for openai embedding");
+		const apiKey = await resolveEmbeddingApiKey();
+		if (!apiKey) {
+			throw new Error(
+				"PI_KNOWLEDGE_EMBEDDING_API_KEY or auth.json credential 'pi-knowledge' required for openai embedding",
+			);
+		}
 		const baseUrl =
 			process.env.PI_KNOWLEDGE_EMBEDDING_BASE_URL?.trim() ||
 			process.env.OPENAI_BASE_URL?.trim() ||

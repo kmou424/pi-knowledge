@@ -140,15 +140,24 @@ OpenAI or OpenAI-compatible embedding APIs can be selected with `PI_KNOWLEDGE_EM
 
 ```bash
 export PI_KNOWLEDGE_EMBEDDING=openai:text-embedding-3-small
-export OPENAI_API_KEY=...
 ```
+
+By default, Pi-hosted runs read the embedding API key from the `pi-knowledge` credential in `~/.pi/agent/auth.json`:
+
+```json
+{
+  "pi-knowledge": { "type": "api_key", "key": "..." }
+}
+```
+
+The `key` value supports Pi auth resolution, including `!command` keystore lookups and `$ENV_VAR` interpolation. If no `pi-knowledge` auth credential is available, pi-knowledge falls back to `PI_KNOWLEDGE_EMBEDDING_API_KEY`. It does not read `OPENAI_API_KEY`, so embedding auth does not affect Pi's global OpenAI provider key.
 
 For self-hosted OpenAI-compatible servers, set either `PI_KNOWLEDGE_EMBEDDING_BASE_URL` or `OPENAI_BASE_URL` to the API root that contains `/embeddings`:
 
 ```bash
 export PI_KNOWLEDGE_EMBEDDING=openai:Qwen3-Embedding-8B
 export PI_KNOWLEDGE_EMBEDDING_BASE_URL=http://127.0.0.1:8080/v1
-export OPENAI_API_KEY=local-placeholder
+export PI_KNOWLEDGE_EMBEDDING_API_KEY=local-placeholder
 ```
 
 API embedding failures are surfaced by default so configuration and context-window problems are visible. To explicitly allow a local fallback after API failures, set `PI_KNOWLEDGE_EMBEDDING_API_FALLBACK=local`.
@@ -163,7 +172,7 @@ Full configuration details are in [docs/configuration.md](docs/configuration.md)
 |------|-----------------------|
 | Storage path | `PI_KNOWLEDGE_DIR`, `OMP_KNOWLEDGE_DIR`, `PI_CODING_AGENT_DIR`, `OMP_CODING_AGENT_DIR`, `OMP_PROFILE` |
 | Model worker and cache | `PI_KNOWLEDGE_MODEL_CACHE_DIR`, `PI_KNOWLEDGE_NODE_PATH` |
-| Embedding provider | `PI_KNOWLEDGE_EMBEDDING`, `OPENAI_API_KEY`, `PI_KNOWLEDGE_EMBEDDING_BASE_URL`, `OPENAI_BASE_URL`, `PI_KNOWLEDGE_EMBEDDING_MAX_CHARS`, `PI_KNOWLEDGE_EMBEDDING_API_FALLBACK` |
+| Embedding provider | `PI_KNOWLEDGE_EMBEDDING`, `PI_KNOWLEDGE_EMBEDDING_API_KEY`, auth.json `pi-knowledge`, `PI_KNOWLEDGE_EMBEDDING_BASE_URL`, `OPENAI_BASE_URL`, `PI_KNOWLEDGE_EMBEDDING_MAX_CHARS`, `PI_KNOWLEDGE_EMBEDDING_API_FALLBACK` |
 | Native lifecycle | `PI_KNOWLEDGE_ENABLE_NATIVE_IDLE_DISPOSE`, `PI_KNOWLEDGE_EMBEDDING_IDLE_MS` |
 | Runtime features | `PI_KNOWLEDGE_WATCH`, `PI_KNOWLEDGE_AUTO_INJECT`, `PI_KNOWLEDGE_STALE_INDEXING_MS`, `PI_KNOWLEDGE_OFFLINE` |
 | Release fixtures | `PI_KNOWLEDGE_E2E_PDF`, `PI_KNOWLEDGE_E2E_DOCX` |

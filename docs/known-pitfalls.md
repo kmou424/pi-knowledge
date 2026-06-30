@@ -32,9 +32,11 @@ PI_KNOWLEDGE_E2E_PDF=/path/to/file.pdf PI_KNOWLEDGE_E2E_DOCX=/path/to/file.docx 
 
 不要把 fixture 檔案、抽取文字、snapshot 或本機絕對路徑 commit 進 repo。回報只寫 pass/fail、是否 skipped、chunk count 等非敏感摘要。
 
-## Pi modelRegistry 不提供 API key
+## pi-knowledge embedding key 不應使用全域 OPENAI_API_KEY
 
-`ctx.modelRegistry` 只管 chat model auth。沒有 `getApiKey(provider)`。Extension 用 `process.env.OPENAI_API_KEY`。這是 Pi 的設計，不是 bug。
+`OPENAI_API_KEY` 是 Pi/OpenAI provider 的全域 chat model key，pi-knowledge embedding 不應讀它，否則插件私有 embedding 設定會污染或依賴全域 OpenAI auth。
+
+Pi extension context exposes `ctx.modelRegistry.authStorage`; pi-knowledge should resolve `auth.json` credential `pi-knowledge` first with `getApiKey("pi-knowledge", { includeFallback: false })`, then fall back to `PI_KNOWLEDGE_EMBEDDING_API_KEY`. This keeps plugin embedding auth separate while still supporting Pi auth resolution such as `!command` keystore lookups.
 
 ## OpenAI-compatible embedding 設定錯誤不能靜默降級
 

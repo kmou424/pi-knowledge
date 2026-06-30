@@ -21,7 +21,8 @@ Default data storage is `~/.pi/knowledge` under Pi and `~/.omp/knowledge` under 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `PI_KNOWLEDGE_EMBEDDING` | `local:multilingual-e5-small` | Select the embedding provider and model. Supported values are local embeddings and `openai:<model>`. |
-| `OPENAI_API_KEY` | unset | API key used when `PI_KNOWLEDGE_EMBEDDING=openai:<model>`. Some local OpenAI-compatible servers accept a placeholder value. |
+| auth.json `pi-knowledge` | unset | Preferred API key source when `PI_KNOWLEDGE_EMBEDDING=openai:<model>` under Pi. Configure `~/.pi/agent/auth.json` with `{ "pi-knowledge": { "type": "api_key", "key": "..." } }`. The `key` value supports Pi auth resolution such as `!command` keystore lookups and `$ENV_VAR` interpolation. |
+| `PI_KNOWLEDGE_EMBEDDING_API_KEY` | unset | Environment fallback API key for OpenAI-compatible embeddings when no `pi-knowledge` auth credential is available. Some local OpenAI-compatible servers accept a placeholder value. |
 | `PI_KNOWLEDGE_EMBEDDING_BASE_URL` | unset | OpenAI-compatible embedding API root, such as `http://127.0.0.1:8080/v1`. Takes precedence over `OPENAI_BASE_URL`. |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Common OpenAI-compatible API root fallback. |
 | `PI_KNOWLEDGE_EMBEDDING_MAX_CHARS` | `20000` | Final per-input API embedding safety cap for OpenAI-compatible servers with smaller context windows. This does not replace chunker bounds. |
@@ -31,6 +32,8 @@ Default data storage is `~/.pi/knowledge` under Pi and `~/.omp/knowledge` under 
 | `PI_KNOWLEDGE_OFFLINE` | unset | Use with a pre-populated model cache for offline local model operation. See `docs/offline-mode.md`. |
 
 API embedding failures intentionally surface by default. Silent fallback can hide bad API keys, wrong base URLs, unsupported model names, or context-window errors and can produce a KB with a different embedding model than intended.
+
+`pi-knowledge` intentionally does not use `OPENAI_API_KEY` for embeddings. This keeps plugin embedding auth separate from Pi's global OpenAI chat provider key.
 
 ## Runtime Features and Diagnostics
 

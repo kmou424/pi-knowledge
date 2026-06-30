@@ -179,9 +179,9 @@ Note: multilingual-e5-small chosen over all-MiniLM-L6-v2 because:
 
 ### Optional: Environment-configured provider
 
-The default path is local ONNX. If `PI_KNOWLEDGE_EMBEDDING` is set to an external provider and the matching environment API key is available, embeddings can use that provider with local fallback:
+The default path is local ONNX. If `PI_KNOWLEDGE_EMBEDDING` is set to an external provider and a configured embedding API key is available, embeddings can use that provider with local fallback:
 - OpenAI `text-embedding-3-small` via `PI_KNOWLEDGE_EMBEDDING=openai:text-embedding-3-small`
-- `OPENAI_API_KEY` is required for OpenAI embedding
+- OpenAI-compatible embedding auth resolves from auth.json `pi-knowledge` first, then falls back to `PI_KNOWLEDGE_EMBEDDING_API_KEY`
 
 ### Vector Storage
 
