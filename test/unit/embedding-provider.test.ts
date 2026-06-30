@@ -56,6 +56,45 @@ describe("embedding provider", () => {
 		expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer auth-json-key");
 	});
 
+	it("formats API query embeddings with the configured instruction", async () => {
+		vi.stubEnv("PI_KNOWLEDGE_EMBEDDING", "openai:custom-embedding-model");
+		vi.stubEnv("PI_KNOWLEDGE_EMBEDDING_API_KEY", "test-key");
+		vi.stubEnv(
+			"PI_KNOWLEDGE_EMBEDDING_QUERY_INSTRUCTION",
+			"Given a user question about a software project, retrieve relevant code or documentation passages that answer it",
+		);
+		const fetchMock = vi.fn(async (_input: URL | string, _init?: RequestInit) =>
+			jsonResponse({ data: [{ embedding: [0.1, 0.2] }] }),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const { embedQuery } = await import("../../src/embedding/provider.ts");
+		await embedQuery("How is embedding auth configured?");
+
+		const [, init] = fetchMock.mock.calls[0];
+		const body = JSON.parse(String(init?.body)) as { input: string[] };
+		expect(body.input[0]).toBe(
+			"Instruct: Given a user question about a software project, retrieve relevant code or documentation passages that answer it\nQuery: How is embedding auth configured?",
+		);
+	});
+
+	it("keeps API passage embeddings on the passage prefix when query instruction is configured", async () => {
+		vi.stubEnv("PI_KNOWLEDGE_EMBEDDING", "openai:custom-embedding-model");
+		vi.stubEnv("PI_KNOWLEDGE_EMBEDDING_API_KEY", "test-key");
+		vi.stubEnv("PI_KNOWLEDGE_EMBEDDING_QUERY_INSTRUCTION", "Retrieve relevant passages");
+		const fetchMock = vi.fn(async (_input: URL | string, _init?: RequestInit) =>
+			jsonResponse({ data: [{ embedding: [0.1, 0.2] }] }),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const { embedDocuments } = await import("../../src/embedding/provider.ts");
+		await embedDocuments(["Embedding authentication reads auth.json first."]);
+
+		const [, init] = fetchMock.mock.calls[0];
+		const body = JSON.parse(String(init?.body)) as { input: string[] };
+		expect(body.input[0]).toBe("passage: Embedding authentication reads auth.json first.");
+	});
+
 	it("surfaces API embedding failures by default instead of silently falling back", async () => {
 		vi.stubEnv("PI_KNOWLEDGE_EMBEDDING", "openai:custom-embedding-model");
 		vi.stubEnv("OPENAI_BASE_URL", "http://127.0.0.1:8080/v1");

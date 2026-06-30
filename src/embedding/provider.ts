@@ -25,6 +25,12 @@ async function resolveEmbeddingApiKey(): Promise<string | undefined> {
 	return resolved?.trim() || process.env.PI_KNOWLEDGE_EMBEDDING_API_KEY?.trim() || undefined;
 }
 
+function formatApiEmbeddingInput(text: string, prefix: "query" | "passage"): string {
+	const queryInstruction = process.env.PI_KNOWLEDGE_EMBEDDING_QUERY_INSTRUCTION?.trim();
+	if (prefix === "query" && queryInstruction) return `Instruct: ${queryInstruction}\nQuery: ${text}`;
+	return `${prefix}: ${text}`;
+}
+
 function clearIdleTimer(): void {
 	if (disposeTimer) clearTimeout(disposeTimer);
 	disposeTimer = null;
@@ -76,7 +82,7 @@ async function embedViaAPI(texts: string[], prefix: "query" | "passage"): Promis
 	const configuredMaxChars = Number(process.env.PI_KNOWLEDGE_EMBEDDING_MAX_CHARS ?? DEFAULT_API_MAX_EMBED_CHARS);
 	const maxChars =
 		Number.isFinite(configuredMaxChars) && configuredMaxChars > 0 ? configuredMaxChars : DEFAULT_API_MAX_EMBED_CHARS;
-	const prefixedTexts = texts.map((t) => `${prefix}: ${t}`);
+	const prefixedTexts = texts.map((t) => formatApiEmbeddingInput(t, prefix));
 	const safeTexts = prefixedTexts.map((text) => (text.length > maxChars ? text.slice(0, maxChars) : text));
 
 	if (provider === "openai") {
