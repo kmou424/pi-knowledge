@@ -296,3 +296,25 @@
 - entry/package 變更需跑 `npm run build`、`node -e "import('./extension.js')"`、`node --experimental-strip-types -e "import('./index.ts')"`、`npm pack --dry-run`。
 - OMP-sensitive 變更需至少跑 OMP install 或 `omp -e ./extension.js` dogfood；若本機無法取得 OMP runtime，release handoff 必須明確標示未驗證。
 - native dependency、model worker、storage path 或 shutdown 變更需補 async lifecycle review 與 targeted regression tests。
+
+---
+
+## ADR-018: Tree-sitter dependency set must install as a root git checkout
+
+**狀態**: 已決定
+
+**背景**: npm registry 安裝 `pi-knowledge` 時，它通常是另一個專案的 dependency，Tree-sitter language parser peer dependencies 會在 nested package 情境下解析。但 Pi/OMP 從 git repository 或 `dist` branch 安裝 extension 時，可能會在 checkout 根目錄直接執行 npm install；npm 10 會對 root dependencies 的 optional peer conflict 執行嚴格解析，導致 `tree-sitter-go@0.23.4` 要求 `tree-sitter@^0.21.1`，而 `tree-sitter-python@0.23.6` / `tree-sitter-rust@0.23.2` 要求 `tree-sitter@^0.22.1` 時直接失敗。
+
+**決策**:
+- Tree-sitter runtime 固定在 `tree-sitter@0.21.1`。
+- Go、Java、TypeScript parser 保持目前可用版本；Python 固定在 `0.23.4`，Rust 固定在 `0.23.1`，讓所有 declared peer ranges 共同接受 `tree-sitter@0.21.1`。
+- CI 和 publish-dist workflow 不使用 `--legacy-peer-deps`，讓普通 `npm ci` 持續驗證 git checkout/root install 相容性。
+
+**理由**:
+- 這個 package 需要支援 npm registry install，也需要支援 git/dist branch 直接安裝；不能只依賴 npm nested dependency 行為。
+- `--legacy-peer-deps` 會掩蓋使用者安裝問題，不能作為產品級修復。
+- 目前 `tree-sitter-go` / `tree-sitter-python` 已有 `0.25`，但 Rust、Java、TypeScript parser 尚未同步到相同 peer range；全量升級到 `tree-sitter@0.25` 仍會造成 peer conflict。
+
+**升級條件**:
+- 只有當 Go、Python、Rust、Java、TypeScript parser 都發布接受同一個新版 `tree-sitter` peer range 的版本時，才整組升級。
+- 升級時需驗證 `npm install` / `npm ci` 不帶 legacy flags 可通過，並 smoke test 每個 grammar 能被 `Parser#setLanguage()` 載入。

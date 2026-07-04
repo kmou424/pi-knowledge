@@ -42,7 +42,7 @@ jobs:
 
           node --version
           npm --version
-          npm ci --legacy-peer-deps
+          npm ci
           npm run build
 
           VERSION="$(node -e "console.log(JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version)")"

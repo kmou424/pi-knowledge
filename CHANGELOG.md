@@ -9,6 +9,11 @@
 
 ### Changed
 - Resolved OpenAI-compatible embedding API keys from Pi `auth.json` credential `pi-knowledge` first, then `PI_KNOWLEDGE_EMBEDDING_API_KEY`, without reading the global `OPENAI_API_KEY`.
+- Resolved OpenAI-compatible embedding API keys from Pi `auth.json` credential `pi-knowledge` first, then `PI_KNOWLEDGE_EMBEDDING_API_KEY`, without reading the global `OPENAI_API_KEY`
+
+### Fixed
+- Aligned Tree-sitter parser dependency versions so npm 10 can install the package directly from a git checkout without `--legacy-peer-deps`.
+- Aligned Tree-sitter parser dependency versions so npm 10 can install the package directly from a git checkout without `--legacy-peer-deps`
 ## [0.4.7] - 2026-07-04
 
 ### Fixed
