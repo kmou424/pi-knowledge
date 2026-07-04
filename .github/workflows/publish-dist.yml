@@ -1,0 +1,70 @@
+name: Publish dist branch
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-dist-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish-dist:
+    name: Build and publish dist
+    runs-on: ubuntu-latest
+    container: node:22-bookworm
+
+    steps:
+      - name: Install git
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates
+          rm -rf /var/lib/apt/lists/*
+
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build dist with Node 22
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+
+          node --version
+          npm --version
+          npm ci --legacy-peer-deps
+          npm run build
+
+          VERSION="$(node -e "console.log(JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version)")"
+          BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          echo "PACKAGE_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "BUILD_DATE=$BUILD_DATE" >> "$GITHUB_ENV"
+
+      - name: Publish single dist branch commit
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+
+          test -d .git
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git checkout --orphan dist-publish
+          git add -A
+          git add -f dist
+
+          git commit -m "dist: v${PACKAGE_VERSION} ${BUILD_DATE}" \
+            -m "Built from ${GITHUB_SHA}."
+          git push --force origin HEAD:dist

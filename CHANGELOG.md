@@ -5,10 +5,10 @@
 ### Added
 - Added support for `PI_KNOWLEDGE_EMBEDDING_QUERY_INSTRUCTION` environment variable to prepend a custom instruction prefix to query embeddings, improving retrieval quality for RAG workflows
 - Recorded the active embedding model on knowledge base entities for model metadata tracking
+- Added publish-dist GitHub Action workflow to build with Node 22 and push dist/ to dist branch on main pushes
 
 ### Changed
 - Resolved OpenAI-compatible embedding API keys from Pi `auth.json` credential `pi-knowledge` first, then `PI_KNOWLEDGE_EMBEDDING_API_KEY`, without reading the global `OPENAI_API_KEY`.
-
 ## [0.4.7] - 2026-07-04
 
 ### Fixed
